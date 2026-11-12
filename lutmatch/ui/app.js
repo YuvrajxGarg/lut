@@ -156,7 +156,11 @@
   }
 
   // ---------- modals ----------
-  function closeModal() { $('#modal-root').innerHTML = ''; modal = null; }
+  function closeModal() {
+    const panel = document.querySelector('#modal-root #output-panel');
+    if (panel) $('#output-holder').appendChild(panel);
+    $('#modal-root').innerHTML = ''; modal = null;
+  }
   function showModal(name, html, onClick, cls) {
     modal = name;
     $('#modal-root').innerHTML = `<div class="modal-back"><div class="modal ${cls || ''}">${html}</div></div>`;
@@ -200,8 +204,6 @@
   function openSettings() {
     showModal('settings', `
       <div class="modal-title"><h2>Settings</h2><button class="btn-icon" data-m="close">${icon('x')}</button></div>
-      <div class="label">Matching</div>
-      <div class="group">${opt('open_after', 'Open the folder when matching finishes', 'Shows the LUTs and graded copies in Finder or Explorer')}</div>
       <div class="label">Updates</div>
       <div class="group">
         <div class="ver-row" id="upd-row"></div>
@@ -349,7 +351,6 @@
 
   // ---------- user actions ----------
   $('#ref-slot').onclick = () => !busy && api.pick_reference();
-  $('#add-files').onclick = () => api.pick_clips();
   $('#dropzone').onclick = () => api.pick_clips();
   $('#add-folder').onclick = () => api.pick_folder();
   $('#match-btn').onclick = () => api.match(mode, customDir);
@@ -378,14 +379,32 @@
     if (!b) return;
     settings = await api.set_setting('lut_only', b.dataset.v === 'lut');
     setTabs('#export-mode', b.dataset.v);
-    $('#codec').classList.toggle('hidden', !!settings.lut_only);
+    renderOutput();
   };
   $('#codec').onclick = async (e) => {
     const b = e.target.closest('button');
     if (!b) return;
     settings = await api.set_setting('codec', b.dataset.v);
     setTabs('#codec', b.dataset.v);
+    renderOutput();
   };
+  const CODEC = { h264: ['H.264', 'Plays everywhere. Small files, high quality (CRF 16).'],
+    hevc: ['HEVC', 'About half the size of H.264 at the same quality.'],
+    prores: ['ProRes', '10-bit ProRes 422 HQ in a .mov, for grading further.'] };
+  function renderOutput() {
+    const c = CODEC[settings.codec] || CODEC.h264;
+    $('#codec-wrap').classList.toggle('hidden', !!settings.lut_only);
+    $('#codec-hint').textContent = c[1];
+    $('#open-after .switch').classList.toggle('on', !!settings.open_after);
+    const where = mode === 'custom' && customDir ? (customDir.split(/[\\/]/).filter(Boolean).pop() || customDir) : 'beside originals';
+    $('#output-sum').textContent = (settings.lut_only ? 'LUT only' : 'LUT + ' + c[0]) + ' · ' + where;
+  }
+  $('#output-row').onclick = () => {
+    showModal('output', `<div class="modal-title"><h2>Output</h2><button class="btn-icon" data-m="close">${icon('x')}</button></div><div id="output-slot"></div>`,
+      (m) => { if (m === 'close') closeModal(); }, 'output');
+    $('#output-slot').replaceWith($('#output-panel'));
+  };
+  $('#open-after').onclick = async () => { settings = await api.set_setting('open_after', !settings.open_after); renderOutput(); };
 
   async function pickCustom() {
     const d = await api.choose_output();
@@ -398,6 +417,7 @@
     $('#custom-row').classList.toggle('hidden', m !== 'custom');
     $('#custom-path').textContent = tilde(customDir) || '';
     $('#save-path').textContent = m === 'custom' && customDir ? tilde(customDir) : 'a “graded” folder beside each clip';
+    renderOutput();
     refresh();
   }
   $('#out-mode').onclick = async (e) => {
@@ -466,7 +486,6 @@
     paintStrength();
     $('#keep-luma .switch').classList.toggle('on', !!settings.keep_luma);
     setTabs('#export-mode', settings.lut_only ? 'lut' : 'graded');
-    $('#codec').classList.toggle('hidden', !!settings.lut_only);
     setTabs('#codec', settings.codec || 'h264');
     setMode(settings.out_mode === 'custom' && customDir ? 'custom' : 'beside');
     renderRef();

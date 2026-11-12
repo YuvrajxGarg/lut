@@ -15,8 +15,8 @@
     <aside id="sidebar">
       <div class="titlebar pywebview-drag-region"></div>
       <div class="side-scroll">
-        <div class="card composer">
-          <div class="label">Reference <span class="faint">· the look you want</span></div>
+        <section class="sect">
+          <div class="sect-head"><b>Reference</b><span>The look you want</span></div>
           <button id="ref-slot" class="ref-slot" data-zone="ref">
             <div class="ref-empty">
               <div class="dz-icon" data-icon="target"></div>
@@ -25,43 +25,27 @@
             </div>
             <div class="ref-full hidden"><img id="ref-img" alt=""><div class="ref-cap"><span id="ref-name"></span><span class="ref-x" id="ref-change">Change</span></div></div>
           </button>
+        </section>
 
-          <div class="label">Clips <span class="faint">· what gets graded</span></div>
+        <section class="sect">
+          <div class="sect-head"><b>Clips</b><span>What gets graded</span><button class="link-btn" id="add-folder">Add folder</button></div>
           <button id="dropzone" class="dropzone" data-zone="clips">
             <div class="dz-icon" data-icon="upload"></div>
-            <b>Drop clips to match</b>
-            <span>MP4 · MOV · MKV · WebM · JPG · PNG · TIFF</span>
+            <div class="dz-text"><b>Drop clips to match</b><span>or click to choose files</span></div>
           </button>
-          <div class="row2">
-            <button class="btn-quiet" id="add-files"><i data-icon="file"></i>Add files</button>
-            <button class="btn-quiet" id="add-folder"><i data-icon="folder"></i>Add folder</button>
-          </div>
+        </section>
 
-          <div class="label slider-label">Strength <span id="strength-val">100%</span></div>
-          <input type="range" id="strength" min="0" max="100" step="1" value="100">
-          <button class="opt mini" id="keep-luma"><div class="t"><b>Colour only</b><span>Keep the clip's brightness and contrast</span></div><span class="switch"></span></button>
-
-          <div class="label">Export</div>
-          <div class="tabs" id="export-mode">
-            <button data-v="graded" class="on"><i data-icon="film"></i>LUT + graded copy</button>
-            <button data-v="lut"><i data-icon="cube"></i>LUT only</button>
+        <section class="sect">
+          <div class="sect-head"><b>Match</b></div>
+          <div class="panel">
+            <div class="panel-row slider-row">
+              <div class="row-top"><span>Strength</span><span class="val" id="strength-val">100%</span></div>
+              <input type="range" id="strength" min="0" max="100" step="1" value="100">
+            </div>
+            <button class="panel-row opt" id="keep-luma"><div class="t"><b>Colour only</b><span>Keep the clip's brightness and contrast</span></div><span class="switch"></span></button>
+            <button class="panel-row opt" id="output-row"><div class="t"><b>Output</b><span id="output-sum"></span></div><span class="chev">›</span></button>
           </div>
-          <div class="tabs small" id="codec">
-            <button data-v="h264" class="on">H.264</button>
-            <button data-v="hevc">HEVC</button>
-            <button data-v="prores">ProRes</button>
-          </div>
-
-          <div class="label">Save to</div>
-          <div class="tabs" id="out-mode">
-            <button data-mode="beside" class="on"><i data-icon="layers"></i>Beside originals</button>
-            <button data-mode="custom"><i data-icon="folder"></i>Choose folder</button>
-          </div>
-          <button class="custom-row hidden" id="custom-row" title="Change folder">
-            <i data-icon="folder"></i><span class="path" id="custom-path"></span><span class="change">Change</span>
-          </button>
-
-        </div>
+        </section>
       </div>
       <div class="side-action">
         <div class="progress hidden" id="progress"><div></div></div>
@@ -101,6 +85,34 @@
   <div id="drop" class="hidden">
     <div class="drop-half" data-zone="ref"><div class="drop-frame"></div><div class="drop-inner"><div class="dz-icon big" data-icon="target"></div>Reference<small>The look you want</small></div></div>
     <div class="drop-half" data-zone="clips"><div class="drop-frame"></div><div class="drop-inner"><div class="dz-icon big" data-icon="film"></div>Clips<small>What gets graded</small></div></div>
+  </div>
+  <div id="output-holder" class="hidden">
+    <div id="output-panel" class="out-panel">
+      <div class="label">Export</div>
+      <div class="tabs" id="export-mode">
+        <button data-v="graded" class="on"><i data-icon="film"></i>LUT + graded copy</button>
+        <button data-v="lut"><i data-icon="cube"></i>LUT only</button>
+      </div>
+      <div id="codec-wrap">
+        <div class="label">Video codec</div>
+        <div class="tabs" id="codec">
+          <button data-v="h264" class="on">H.264</button>
+          <button data-v="hevc">HEVC</button>
+          <button data-v="prores">ProRes 422 HQ</button>
+        </div>
+        <div class="hint" id="codec-hint"></div>
+      </div>
+      <div class="label">Save to</div>
+      <div class="tabs" id="out-mode">
+        <button data-mode="beside" class="on"><i data-icon="layers"></i>Beside originals</button>
+        <button data-mode="custom"><i data-icon="folder"></i>Choose folder</button>
+      </div>
+      <button class="custom-row hidden" id="custom-row" title="Change folder">
+        <i data-icon="folder"></i><span class="path" id="custom-path"></span><span class="change">Change</span>
+      </button>
+      <div class="label">After matching</div>
+      <div class="group"><button class="opt" id="open-after"><div class="t"><b>Open the folder when done</b><span>Shows the LUTs and graded copies in Finder or Explorer</span></div><span class="switch"></span></button></div>
+    </div>
   </div>
   <div id="modal-root"></div>
   <div id="toasts"></div>
