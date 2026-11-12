@@ -28,8 +28,8 @@ An AI shot next to real footage, a B-cam that doesn't match the A-cam, a drone c
 
 | Platform | Download | First launch |
 |---|---|---|
-| **macOS** 11+ · Apple silicon | [**Lut-mac.zip**](https://github.com/YuvrajxGarg/lut/releases/latest/download/Lut-mac.zip) | Unzip and move **Lut** to Applications. The app isn't notarized, so the first time: right-click → **Open**. On macOS 15 and later, go to **System Settings → Privacy & Security → Open Anyway** instead. |
-| **Windows** 10 / 11 · 64-bit | [**Lut-windows.zip**](https://github.com/YuvrajxGarg/lut/releases/latest/download/Lut-windows.zip) | Unzip the **Lut** folder somewhere you own (Documents, Desktop) and run **Lut.exe**. If SmartScreen appears, click **More info → Run anyway**. |
+| **macOS** 11+ · Apple silicon | [**Lut.dmg**](https://github.com/YuvrajxGarg/lut/releases/latest/download/Lut.dmg) | Open it and drag **Lut** to Applications. The app isn't notarized, so the first time: right-click → **Open**. On macOS 15 and later, go to **System Settings → Privacy & Security → Open Anyway** instead. |
+| **Windows** 10 / 11 · 64-bit | [**Lut-Setup.exe**](https://github.com/YuvrajxGarg/lut/releases/latest/download/Lut-Setup.exe) | Run the setup. It installs Lut for your account (no admin needed) and adds it to the Start menu. If SmartScreen appears, click **More info → Run anyway**. |
 
 Or install it from [PXL](https://github.com/YuvrajxGarg/pxl). Website: [lut.pxlvzn.in](https://lut.pxlvzn.in). ffmpeg comes bundled, so there's nothing else to install. Lut checks this repository for new releases and updates itself.
 
@@ -121,7 +121,7 @@ Lut.spec              PyInstaller recipe for both platforms
    git tag v1.0.0 && git push origin v1.0.0
    ```
 
-3. The **Release** workflow builds, tests and smoke-tests both apps, then attaches `Lut-mac.zip` and `Lut-windows.zip` (each with a `.sha256`) to the release. Installed copies pick it up on their next update check, and PXL installs from it.
+3. The **Release** workflow builds, tests and smoke-tests both apps, then attaches the installers (`Lut.dmg`, `Lut-Setup.exe`) and the update zips (`Lut-mac.zip`, `Lut-windows.zip`, each with a `.sha256`) to the release. Installed copies pick it up on their next update check, and PXL installs from it.
 
 ## License
 

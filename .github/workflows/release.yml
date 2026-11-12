@@ -2,6 +2,10 @@
 #   - a version tag (v1.2.3) is pushed, or
 #   - VERSION changes on main (the tag v<VERSION> is created for that commit). Installed copies check
 # the latest release for updates:
+# What people download (installer/ builds these):
+#   macOS   -> Lut.dmg          (drag to Applications)
+#   Windows -> Lut-Setup.exe    (setup wizard)
+# What installed copies update from (keep these: every existing install uses them):
 #   macOS   -> Lut-mac.zip      + .sha256
 #   Windows -> Lut-windows.zip  + .sha256
 name: Release
@@ -95,6 +99,9 @@ jobs:
           ditto -c -k --keepParent Lut.app Lut-mac.zip
           shasum -a 256 Lut-mac.zip > Lut-mac.zip.sha256
           cat Lut-mac.zip.sha256
+      - name: Disk image (macOS)
+        if: runner.os == 'macOS'
+        run: installer/build_mac.sh Lut && installer/test_mac.sh Lut
       - name: Package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -104,10 +111,19 @@ jobs:
           $h = (Get-FileHash Lut-windows.zip -Algorithm SHA256).Hash.ToLower()
           "$h  Lut-windows.zip" | Out-File -Encoding ascii -NoNewline Lut-windows.zip.sha256
           Get-Content Lut-windows.zip.sha256
+      - name: Setup wizard (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          installer/build_windows.ps1 -App Lut -Version $env:TAG -Url https://lut.pxlvzn.in
+          installer/test_windows.ps1 -App Lut -Smoke "python tests/smoke_app.py"
       - name: Upload to the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG" dist/Lut-*.zip dist/Lut-*.zip.sha256 --clobber
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then files="dist/Lut-mac.zip* dist/Lut.dmg*"
+          else files="dist/Lut-windows.zip* dist/Lut-Setup.exe*"; fi
+          gh release upload "$TAG" $files --clobber
 
   publish:
     needs: [release, build]
