@@ -1,0 +1,8 @@
+.venv/
+.venv-build/
+build/
+dist/
+__pycache__/
+.claude/
+.DS_Store
+graded/
