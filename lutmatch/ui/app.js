@@ -186,7 +186,7 @@
       case 'checking': return ['Checking for updates…', ''];
       case 'uptodate': return ["You're up to date", 'ok'];
       case 'available': return [`Version ${upd.latest} is available`, 'ok'];
-      case 'downloading': return [`Downloading ${upd.latest}… ${Math.round(upd.progress * 100)}%`, ''];
+      case 'downloading': return [upd.progress >= 1 ? `Preparing ${upd.latest}…` : `Downloading ${upd.latest}… ${Math.round(upd.progress * 100)}%`, ''];
       case 'ready': return [`Version ${upd.latest} is ready to install`, 'ok'];
       case 'installing': return ['Installing…', ''];
       case 'failed': return [upd.error || 'Update failed', 'bad'];
@@ -232,7 +232,7 @@
     if (!upd || !['available', 'downloading', 'ready', 'installing'].includes(upd.phase)) { p.classList.add('hidden'); return; }
     p.classList.remove('hidden');
     p.innerHTML = upd.phase === 'ready' ? `${icon('refresh')}Restart to update` :
-      upd.phase === 'downloading' ? `${icon('download')}Updating ${Math.round(upd.progress * 100)}%` :
+      upd.phase === 'downloading' ? (upd.progress >= 1 ? `${icon('refresh')}Preparing update…` : `${icon('download')}Updating ${Math.round(upd.progress * 100)}%`) :
       upd.phase === 'installing' ? `${icon('refresh')}Installing…` : `${icon('download')}Update to ${esc(upd.latest)}`;
   }
 
@@ -241,7 +241,7 @@
     const ph = upd.phase;
     const pct = Math.round((upd.progress || 0) * 100);
     const sub = ph === 'ready' ? 'Downloaded and ready. Restart now, or it installs the next time you quit.' :
-      ph === 'downloading' ? `Downloading… ${pct}%` : ph === 'installing' ? 'Installing and restarting…' :
+      ph === 'downloading' ? (pct >= 100 ? 'Checking and unpacking the update…' : `Downloading… ${pct}%`) : ph === 'installing' ? 'Installing and restarting…' :
       ph === 'failed' ? (upd.error || 'Something went wrong.') : ph === 'uptodate' ? "You're on the newest version." :
       `You have ${esc(upd.current)}.` + (upd.can_install ? '' : ' This copy runs from source, so the download page opens instead.');
     const primary = ph === 'ready' ? `<button class="btn-primary inline" data-m="install">${icon('refresh')}Restart to update</button>` :

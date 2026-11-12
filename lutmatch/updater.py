@@ -235,6 +235,7 @@ class Updater(object):
             work = tempfile.mkdtemp(prefix="LutUpdate-")
             zpath = os.path.join(work, asset_name())
             self._download(rel["zip"], zpath)
+            self._set("downloading", progress=1.0)   # the UI shows "Preparing…" while it verifies and unpacks
 
             if rel["sha"]:
                 with _request(rel["sha"], accept="application/octet-stream") as r:
