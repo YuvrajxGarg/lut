@@ -425,3 +425,48 @@ input[type=range]:focus { outline: none; }
 .empty p { max-width: 520px; }
 .side-action { padding: 10px 14px 12px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--stroke); }
 .ref-slot { height: 132px; }
+
+/* ---------- sidebar v2: three calm sections, output settings in a sheet ---------- */
+#sidebar { width: 360px; }
+#toasts { left: 360px; }
+.side-scroll { padding: 48px 20px 16px; gap: 22px; }
+body.win .side-scroll { padding-top: 22px; }
+.sect { display: flex; flex-direction: column; gap: 10px; }
+.sect-head { display: flex; align-items: baseline; gap: 8px; padding: 0 2px; }
+.sect-head b { font: 600 13px var(--font-display); color: var(--text); }
+.sect-head span { color: var(--text3); font-size: 11.5px; }
+.link-btn { margin-left: auto; color: var(--text2); font-size: 12px; font-weight: 500; }
+.link-btn:hover { color: var(--accent); }
+.ref-slot { height: auto; aspect-ratio: 16 / 9; border-radius: 14px; }
+.ref-empty { gap: 8px; }
+.composer .dropzone, .sect .dropzone { height: auto; flex-direction: row; justify-content: flex-start; gap: 14px; padding: 18px 16px; border-radius: 14px; text-align: left; }
+.dropzone .dz-icon { margin: 0; }
+.dz-text { display: flex; flex-direction: column; gap: 3px; }
+.panel { background: var(--card); border: 1px solid var(--stroke); border-radius: 14px; padding: 0 14px; }
+.panel-row { display: flex; width: 100%; padding: 13px 0; }
+.panel-row + .panel-row { border-top: 1px solid var(--stroke); }
+.slider-row { flex-direction: column; gap: 8px; padding-bottom: 8px; }
+.row-top { display: flex; justify-content: space-between; font-weight: 500; }
+.row-top .val { color: var(--text2); font-variant-numeric: tabular-nums; }
+.panel-row.opt .t b { font-weight: 500; }
+.panel-row.opt .t span { margin-top: 2px; }
+.chev { color: var(--text3); font-size: 20px; line-height: 1; padding: 0 2px 2px; }
+#output-row:hover .chev { color: var(--text); }
+#output-sum { color: var(--text2) !important; }
+.side-action { padding: 14px 20px; }
+#footer { padding: 2px 24px 16px; }
+
+.modal.output { width: 460px; gap: 16px; padding: 22px; }
+.out-panel { display: flex; flex-direction: column; gap: 10px; }
+.out-panel .label { margin-top: 8px; }
+.out-panel .label:first-child { margin-top: 0; }
+.out-panel .tabs button { height: 34px; }
+.out-panel .hint { color: var(--text3); font-size: 11.5px; padding: 0 2px; }
+.out-panel #codec-wrap { display: flex; flex-direction: column; gap: 10px; }
+.out-panel .group { padding: 2px 14px; }
+.grid { padding: 4px 24px 60px 28px; gap: 20px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+.card-foot { padding: 12px 14px 14px; }
+.topbar { padding: 14px 22px 6px 28px; }
+.ref-slot { aspect-ratio: auto; height: 156px; }
+.side-scroll { gap: 20px; }
+#save-row { display: none !important; }
