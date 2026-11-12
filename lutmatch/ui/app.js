@@ -246,7 +246,7 @@
       ph === 'available' || ph === 'failed' ? `<button class="btn-primary inline" data-m="${upd.can_install ? 'download' : 'page'}">${icon('download')}${upd.can_install ? 'Download update' : 'Open download page'}</button>` : '';
     showModal('update', `
       <div class="update-hero">
-        <div class="logomark lg"><span class="mark" style="--size:30px">lut<span class="px solo"></span></span></div>
+        <div class="logomark lg"><span class="mark lut" style="--size:30px">lut<span class="graded" aria-hidden="true">lut</span><i class="wipe"></i></span></div>
         <div><h2>${upd.latest ? 'Lut ' + esc(upd.latest) : 'Updates'}</h2><p class="${ph === 'failed' ? 'err' : ''}">${sub}</p></div>
       </div>
       ${ph === 'downloading' ? `<div class="progress"><div style="width:${pct}%"></div></div>` : ''}
@@ -265,7 +265,7 @@
     const w = $('#welcome');
     let page = 0;
     const pages = [
-      () => `<div class="logomark lg" style="width:96px;height:96px;border-radius:26px"><span class="mark" style="--size:38px">lut<span class="px solo"></span></span></div>
+      () => `<div class="logomark lg" style="width:96px;height:96px;border-radius:26px"><span class="mark lut" style="--size:38px">lut<span class="graded" aria-hidden="true">lut</span><i class="wipe"></i></span></div>
         <h1>Welcome to Lut</h1>
         <p class="lead">Drop a frame with the look you want and the clip you shot.<br>Lut matches the colour and hands you a LUT and a graded copy.</p>
         <div class="facts">
@@ -471,11 +471,11 @@
     setMode(settings.out_mode === 'custom' && customDir ? 'custom' : 'beside');
     renderRef();
     renderPill();
-    if (!settings.welcomed) setTimeout(showWelcome, 1150);
+    if (!settings.welcomed) setTimeout(showWelcome, 1500);
     $('#ffmpeg-note').innerHTML = info.ffmpeg ? '<i class="dot"></i>Photos and videos supported' : '<i class="dot bad"></i>Videos need ffmpeg (see README)';
     refresh();
-    setTimeout(() => { $('#splash').classList.add('out'); $('#app').classList.add('in'); }, 1150);
-    setTimeout(() => $('#splash').remove(), 1800);
+    setTimeout(() => { $('#splash').classList.add('out'); $('#app').classList.add('in'); }, 1500);
+    setTimeout(() => $('#splash').remove(), 2150);
   }
 
   // Demo data for previewing the UI in a plain browser (open index.html?demo).

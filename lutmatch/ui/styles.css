@@ -320,11 +320,29 @@ body.win .titlebar { display: none; }
 /* Lut                                                                     */
 /* ====================================================================== */
 
-/* the mark: "lut" and one lime pixel (the PXL family glyph) */
-.mark .px { display: inline-block; width: .19em; height: .19em; margin-left: .06em; vertical-align: baseline; background: var(--accent); }
-.splash-mark .px { opacity: 0; transform: scale(0); animation: pop-px .45s .55s cubic-bezier(.3,1.6,.5,1) forwards; }
-@keyframes pop-px { to { opacity: 1; transform: none; } }
-.splash-mark .l:nth-child(2) { padding-bottom: .08em; }
+/* the mark: "lut" with a before/after wipe. Left of the lime handle the letters are
+   untouched (white); right of it they're graded (lime). Dwn has its arrow, Tag its strike. */
+.mark.lut { --w: 57%; }
+.mark.lut .graded { position: absolute; left: 0; top: 0; right: 0; bottom: 0; color: var(--accent); pointer-events: none;
+  clip-path: inset(-.3em -.3em -.3em var(--w)); -webkit-clip-path: inset(-.3em -.3em -.3em var(--w)); }
+.mark.lut .wipe { position: absolute; left: var(--w); top: -.04em; bottom: -.2em; width: .075em; margin-left: -.0375em; border-radius: .05em;
+  background: var(--accent); box-shadow: 0 0 0 .045em var(--knock, var(--bg)); }
+.logomark .mark.lut { --knock: #1d1d1f; }
+/* Splash: the letters rise (family motion), then the handle drags in from the right and
+   grades the letters as it passes, overshoots, and settles. */
+.splash-mark.lut .graded { clip-path: inset(-.3em -.3em -.3em 104%); -webkit-clip-path: inset(-.3em -.3em -.3em 104%);
+  animation: grade .8s .45s cubic-bezier(.55,0,.25,1) forwards; }
+.splash-mark.lut .wipe { left: 104%; opacity: 0; animation: wipe .8s .45s cubic-bezier(.55,0,.25,1) forwards; }
+@keyframes grade {
+  60% { clip-path: inset(-.3em -.3em -.3em 30%); -webkit-clip-path: inset(-.3em -.3em -.3em 30%); }
+  to { clip-path: inset(-.3em -.3em -.3em var(--w)); -webkit-clip-path: inset(-.3em -.3em -.3em var(--w)); }
+}
+@keyframes wipe {
+  8% { opacity: 1; }
+  60% { left: 30%; opacity: 1; }
+  to { left: var(--w); opacity: 1; }
+}
+.splash-mark .graded { padding: 0; }
 
 /* reference slot */
 .ref-slot { display: block; width: 100%; height: 150px; border-radius: 12px; border: 1.5px dashed rgba(255,255,255,.13); overflow: hidden;

@@ -1,4 +1,5 @@
-"""Renders the Lut icon: "lut" in a heavy grotesk and one lime pixel, on the same tile as Dwn and Tag.
+"""Renders the Lut icon: "lut" in a heavy grotesk with a before/after wipe, on the same tile as Dwn and Tag.
+Left of the lime handle the letters are white (the original); right of it they're lime (graded).
     python assets/make_icon.py        (writes icon.png, icon.ico, AppIcon.icns and docs/icon-256.png)
 Needs Pillow and the Inter Display Black font (https://rsms.me/inter/); pass a font path to override.
 """
@@ -37,22 +38,37 @@ def tile():
 
 
 def mark(img):
-    size = 400
+    size = 420
     font = ImageFont.truetype(FONT, size)
-    d = ImageDraw.Draw(img)
     kern = -0.055 * size
     widths = [font.getlength(ch) for ch in "lut"]
-    px = 0.19 * size
-    gap = 0.06 * size
-    total = sum(widths) + kern * 2 + gap + px
-    x = (S - total) / 2
+    total = sum(widths) + kern * 2
+    x0 = (S - total) / 2
     asc, _ = font.getmetrics()
     baseline = (Y0 + Y1) / 2 + size * 0.36
-    for ch, w in zip("lut", widths):
-        d.text((x, baseline - asc), ch, font=font, fill=(255, 255, 255, 242))
-        x += w + kern
-    x += gap - kern
-    d.rectangle((x, baseline - px, x + px, baseline), fill=LIME)
+
+    def letters(color):
+        layer = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+        d = ImageDraw.Draw(layer)
+        x = x0
+        for ch, w in zip("lut", widths):
+            d.text((x, baseline - asc), ch, font=font, fill=color)
+            x += w + kern
+        return layer
+
+    wx = x0 + total * 0.57                # the wipe handle, same place as in the app's mark
+    line_w, gap = 0.075 * size, 0.045 * size
+    top, bottom = baseline - size * 0.77, baseline + size * 0.17
+    white, lime = letters((255, 255, 255, 242)), letters(LIME)
+    cut = Image.new("L", (S, S), 0)
+    ImageDraw.Draw(cut).rectangle((wx, 0, S, S), fill=255)
+    graded = Image.composite(lime, white, cut)
+    # knock a gap around the handle so it reads as slicing through the letters
+    knock = Image.new("L", (S, S), 255)
+    ImageDraw.Draw(knock).rounded_rectangle((wx - line_w / 2 - gap, top - gap, wx + line_w / 2 + gap, bottom + gap), line_w, fill=0)
+    graded.putalpha(Image.composite(graded.getchannel("A"), Image.new("L", (S, S), 0), knock))
+    img = Image.alpha_composite(img, graded)
+    ImageDraw.Draw(img).rounded_rectangle((wx - line_w / 2, top, wx + line_w / 2, bottom), line_w / 2, fill=LIME)
     return img
 
 

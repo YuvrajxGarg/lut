@@ -1,5 +1,6 @@
-# Builds Lut for macOS and Windows when a version tag (v1.2.3) is
-# pushed, and attaches the apps to that GitHub release. Installed copies check
+# Builds Lut for macOS and Windows and attaches the apps to a GitHub release when
+#   - a version tag (v1.2.3) is pushed, or
+#   - VERSION changes on main (the tag v<VERSION> is created for that commit). Installed copies check
 # the latest release for updates:
 #   macOS   -> Lut-mac.zip      + .sha256
 #   Windows -> Lut-windows.zip  + .sha256
@@ -8,6 +9,8 @@ name: Release
 on:
   push:
     tags: ['v*']
+    branches: [main]
+    paths: [VERSION]
   workflow_dispatch:
     inputs:
       tag:
@@ -17,23 +20,47 @@ on:
 permissions:
   contents: write
 
-env:
-  TAG: ${{ github.event.inputs.tag || github.ref_name }}
-
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      skip: ${{ steps.tag.outputs.skip }}
     steps:
       - uses: actions/checkout@v4
-      - name: Create the release if it doesn't exist
+      - name: Work out the tag
+        id: tag
         env:
           GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
-          gh release view "$TAG" >/dev/null 2>&1 || \
+          if [ -n "$INPUT_TAG" ]; then tag="$INPUT_TAG"
+          elif [ "$GITHUB_REF_TYPE" = "tag" ]; then tag="$GITHUB_REF_NAME"
+          else tag="v$(tr -d '[:space:]' < VERSION)"; fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          # A VERSION bump on main for a version that's already released does nothing.
+          if [ "$GITHUB_REF_TYPE" = "branch" ] && [ -z "$INPUT_TAG" ] && gh release view "$tag" >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Create the release if it doesn't exist
+        if: steps.tag.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 && exit 0
+          if [ "$GITHUB_REF_TYPE" = "branch" ] && [ -z "$INPUT_TAG" ]; then
+            gh release create "$TAG" --title "Lut ${TAG#v}" --generate-notes --target "$GITHUB_SHA"
+          else
             gh release create "$TAG" --title "Lut ${TAG#v}" --generate-notes --verify-tag
+          fi
 
   build:
     needs: release
+    if: needs.release.outputs.skip != 'true'
+    env:
+      TAG: ${{ needs.release.outputs.tag }}
     strategy:
       matrix:
         os: [macos-15, windows-latest]
