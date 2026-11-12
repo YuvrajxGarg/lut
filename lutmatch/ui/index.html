@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Lut</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="splash" class="pywebview-drag-region">
+    <div class="glow"></div>
+    <span class="mark splash-mark" style="--size:76px"><span class="l">l</span><span class="l">u</span><span class="l">t</span><span class="px solo"></span></span>
+  </div>
+
+  <div id="app">
+    <aside id="sidebar">
+      <div class="titlebar pywebview-drag-region"></div>
+      <div class="side-scroll">
+        <div class="card composer">
+          <div class="label">Reference <span class="faint">· the look you want</span></div>
+          <button id="ref-slot" class="ref-slot" data-zone="ref">
+            <div class="ref-empty">
+              <div class="dz-icon" data-icon="target"></div>
+              <b>Drop a reference</b>
+              <span>A still or a clip with the colour you're after</span>
+            </div>
+            <div class="ref-full hidden"><img id="ref-img" alt=""><div class="ref-cap"><span id="ref-name"></span><span class="ref-x" id="ref-change">Change</span></div></div>
+          </button>
+
+          <div class="label">Clips <span class="faint">· what gets graded</span></div>
+          <button id="dropzone" class="dropzone" data-zone="clips">
+            <div class="dz-icon" data-icon="upload"></div>
+            <b>Drop clips to match</b>
+            <span>MP4 · MOV · MKV · WebM · JPG · PNG · TIFF</span>
+          </button>
+          <div class="row2">
+            <button class="btn-quiet" id="add-files"><i data-icon="file"></i>Add files</button>
+            <button class="btn-quiet" id="add-folder"><i data-icon="folder"></i>Add folder</button>
+          </div>
+
+          <div class="label slider-label">Strength <span id="strength-val">100%</span></div>
+          <input type="range" id="strength" min="0" max="100" step="1" value="100">
+          <button class="opt mini" id="keep-luma"><div class="t"><b>Colour only</b><span>Keep the clip's brightness and contrast</span></div><span class="switch"></span></button>
+
+          <div class="label">Export</div>
+          <div class="tabs" id="export-mode">
+            <button data-v="graded" class="on"><i data-icon="film"></i>LUT + graded copy</button>
+            <button data-v="lut"><i data-icon="cube"></i>LUT only</button>
+          </div>
+          <div class="tabs small" id="codec">
+            <button data-v="h264" class="on">H.264</button>
+            <button data-v="hevc">HEVC</button>
+            <button data-v="prores">ProRes</button>
+          </div>
+
+          <div class="label">Save to</div>
+          <div class="tabs" id="out-mode">
+            <button data-mode="beside" class="on"><i data-icon="layers"></i>Beside originals</button>
+            <button data-mode="custom"><i data-icon="folder"></i>Choose folder</button>
+          </div>
+          <button class="custom-row hidden" id="custom-row" title="Change folder">
+            <i data-icon="folder"></i><span class="path" id="custom-path"></span><span class="change">Change</span>
+          </button>
+
+        </div>
+      </div>
+      <div class="side-action">
+        <div class="progress hidden" id="progress"><div></div></div>
+        <button class="btn-primary" id="match-btn" disabled><i data-icon="wand"></i><span>Match</span></button>
+      </div>
+
+      <footer id="footer">
+        <button class="frow" id="save-row"><i data-icon="folder"></i><span>Saving to</span><span class="path" id="save-path"></span></button>
+        <div class="frow" id="ffmpeg-note"></div>
+        <div class="frow brandrow">
+          <span class="mark" style="--size:13px;--knock:var(--sidebar)">lut<span class="px solo"></span></span>
+          <span id="version"></span>
+          <button class="update-pill hidden" id="update-pill"></button>
+        </div>
+      </footer>
+    </aside>
+
+    <main id="content">
+      <div class="topbar pywebview-drag-region">
+        <div class="stats" id="stats"></div>
+        <div class="top-actions">
+          <button class="btn-quiet hidden" id="clear"><i data-icon="trash"></i>Clear</button>
+          <button class="btn-icon filled hidden" id="open-out" title="Show graded files"><i data-icon="folder"></i></button>
+          <button class="btn-icon filled" id="open-settings" title="Settings"><i data-icon="gear"></i></button>
+        </div>
+      </div>
+      <div id="list" class="grid"></div>
+      <div id="empty" class="empty">
+        <div class="logomark lg"><span class="mark" style="--size:30px">lut<span class="px solo"></span></span></div>
+        <h3>Match one shot to another</h3>
+        <p>Drop a reference with the look you want, then the clips to grade.<br>You get a .cube LUT for Resolve, Premiere or Final Cut, plus a graded copy.</p>
+      </div>
+    </main>
+  </div>
+
+  <div id="welcome" class="hidden"></div>
+  <div id="drop" class="hidden">
+    <div class="drop-half" data-zone="ref"><div class="drop-frame"></div><div class="drop-inner"><div class="dz-icon big" data-icon="target"></div>Reference<small>The look you want</small></div></div>
+    <div class="drop-half" data-zone="clips"><div class="drop-frame"></div><div class="drop-inner"><div class="dz-icon big" data-icon="film"></div>Clips<small>What gets graded</small></div></div>
+  </div>
+  <div id="modal-root"></div>
+  <div id="toasts"></div>
+  <script src="app.js"></script>
+</body>
+</html>

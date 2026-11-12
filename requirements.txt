@@ -1,0 +1,10 @@
+# App window (WebKit on macOS, Edge WebView2 on Windows)
+pywebview>=5.0
+# Colour maths and LUT sampling
+numpy>=1.24
+# Reading and writing photos, preview images
+pillow>=10.0
+# ffmpeg binary for reading and grading videos (used if ffmpeg isn't installed system-wide)
+imageio-ffmpeg>=0.4.9
+# Trusted certificates for update checks in the packaged app
+certifi
