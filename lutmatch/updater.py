@@ -196,7 +196,8 @@ class Updater(object):
             self._set("checking")
         try:
             rel = self.fetch_latest()
-            if not is_newer(rel["version"], __version__):
+            # A release whose build for this platform isn't attached yet isn't an update yet.
+            if not is_newer(rel["version"], __version__) or not rel["zip"]:
                 self._set("uptodate")
             elif self.settings.get("staged_version") == rel["version"] and os.path.exists(self.staged_path):
                 self._set("ready")
@@ -228,7 +229,7 @@ class Updater(object):
                 self._set("ready")
                 return True
             if not rel["zip"]:
-                self._set("available")
+                self._set("uptodate")
                 return False
 
             self._set("downloading", progress=0.0)

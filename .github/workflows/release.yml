@@ -25,6 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
+      ref: ${{ steps.tag.outputs.ref }}
       skip: ${{ steps.tag.outputs.skip }}
     steps:
       - uses: actions/checkout@v4
@@ -38,10 +39,13 @@ jobs:
           elif [ "$GITHUB_REF_TYPE" = "tag" ]; then tag="$GITHUB_REF_NAME"
           else tag="v$(tr -d '[:space:]' < VERSION)"; fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if [ -n "$INPUT_TAG" ]; then echo "ref=$INPUT_TAG" >> "$GITHUB_OUTPUT"; else echo "ref=$GITHUB_SHA" >> "$GITHUB_OUTPUT"; fi
           # A VERSION bump on main for a version that's already released does nothing.
           if [ "$GITHUB_REF_TYPE" = "branch" ] && [ -z "$INPUT_TAG" ] && gh release view "$tag" >/dev/null 2>&1; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
+      # Created as a draft: installed copies only see it once the builds are attached
+      # and the publish job below makes it public.
       - name: Create the release if it doesn't exist
         if: steps.tag.outputs.skip != 'true'
         env:
@@ -51,9 +55,9 @@ jobs:
         run: |
           gh release view "$TAG" >/dev/null 2>&1 && exit 0
           if [ "$GITHUB_REF_TYPE" = "branch" ] && [ -z "$INPUT_TAG" ]; then
-            gh release create "$TAG" --title "Lut ${TAG#v}" --generate-notes --target "$GITHUB_SHA"
+            gh release create "$TAG" --title "Lut ${TAG#v}" --generate-notes --target "$GITHUB_SHA" --draft
           else
-            gh release create "$TAG" --title "Lut ${TAG#v}" --generate-notes --verify-tag
+            gh release create "$TAG" --title "Lut ${TAG#v}" --generate-notes --verify-tag --draft
           fi
 
   build:
@@ -71,7 +75,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ needs.release.outputs.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -104,3 +108,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$TAG" dist/Lut-*.zip dist/Lut-*.zip.sha256 --clobber
+
+  publish:
+    needs: [release, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish the release now that both apps are attached
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.release.outputs.tag }}
+        run: gh release edit "$TAG" --draft=false --latest
