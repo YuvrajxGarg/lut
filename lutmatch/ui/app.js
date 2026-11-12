@@ -168,8 +168,17 @@
     $('#modal-root').innerHTML = ''; modal = null;
   }
   function showModal(name, html, onClick, cls) {
+    const box = modal === name && $('#modal-root .modal');
     modal = name;
-    $('#modal-root').innerHTML = `<div class="modal-back"><div class="modal ${cls || ''}">${html}</div></div>`;
+    if (box) {
+      // Same dialog again: swap what's inside so the dark backdrop doesn't fade in again (that read as the window blinking).
+      const panel = document.querySelector('#modal-root #output-panel');
+      if (panel) $('#output-holder').appendChild(panel);
+      box.className = `modal ${cls || ''}`;
+      box.innerHTML = html;
+    } else {
+      $('#modal-root').innerHTML = `<div class="modal-back"><div class="modal ${cls || ''}">${html}</div></div>`;
+    }
     $('#modal-root .modal-back').onclick = (e) => {
       if (e.target.classList.contains('modal-back')) return closeModal();
       const el = e.target.closest('[data-m]');
@@ -296,6 +305,17 @@
       upd.phase === 'installing' ? `${icon('refresh')}Installing…` : `${icon('download')}Update to ${esc(upd.latest)}`;
   }
 
+  // Progress ticks arrive several times a second: only the bar and its line change.
+  function patchUpdateProgress() {
+    const bar = $('#modal-root .progress > div');
+    const line = $('#modal-root .update-hero p');
+    if (!bar || !line) return false;
+    const pct = Math.round((upd.progress || 0) * 100);
+    bar.style.width = pct + '%';
+    line.textContent = pct >= 100 ? 'Checking and unpacking the update…' : `Downloading… ${pct}%`;
+    return true;
+  }
+
   function openUpdate() {
     if (!upd) return;
     const ph = upd.phase;
@@ -401,7 +421,7 @@
         const prev = upd && upd.phase;
         upd = p;
         renderPill();
-        if (modal === 'update') openUpdate();
+        if (modal === 'update' && !(prev === 'downloading' && p.phase === 'downloading' && patchUpdateProgress())) openUpdate();
         else if (modal === 'settings') renderUpdateRow();
         if (prev !== 'ready' && p.phase === 'ready' && modal !== 'update')
           toast(`Version ${p.latest} is ready`, false, { label: 'Restart', run: () => api.install_update() });
