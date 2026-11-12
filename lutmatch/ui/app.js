@@ -40,6 +40,10 @@
   let mode = 'beside', customDir = null, busy = false, lastDir = null;
   let api = null;
   let settings = {}, upd = null, modal = null, home = '';
+  let claude = { has_key: false, hint: '' }, sources = [];
+  const SHORT = { auto: 'Auto', rec709: 'Rec.709', slog3: 'S-Log3', vlog: 'V-Log', logc3: 'LogC3', logc4: 'LogC4', clog3: 'C-Log3',
+    nlog: 'N-Log', flog: 'F-Log', flog2: 'F-Log2', applelog: 'Apple Log', hlg: 'HLG', pq: 'PQ' };
+  const short = (k) => SHORT[k] || k || 'Auto';
   const tilde = (p) => (home && p && p.startsWith(home) ? '~' + p.slice(home.length) : p);
   const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
@@ -61,7 +65,7 @@
 
   // ---------- clip cards ----------
   const STATUS = {
-    loading: ['', 'Reading', true], ready: ['', 'Ready'], matching: ['', 'Matching', true],
+    loading: ['', 'Reading', true], ready: ['', 'Ready'], matching: ['', 'Matching', true], refining: ['', 'Claude', true],
     done: ['done', 'Done', false, 'check'], failed: ['failed', 'Failed', false, 'alert'], unsupported: ['failed', 'Can’t read'],
   };
   function statusPill(it) {
@@ -86,11 +90,13 @@
       ? `<span class="err">${esc(it.error)}</span>`
       : it.status === 'done'
         ? `<span class="sub">${it.graded ? 'LUT and graded copy saved' : 'LUT saved'}</span>`
-        : `<span class="sub">${esc(it.ext)} · ${esc(it.size)}</span>`;
+        : `<span class="sub">${esc(it.ext)} · ${esc(it.size)}${it.source && it.source !== 'rec709' ? ` <span class="src-chip">${esc(short(it.source))}</span>` : ''}</span>`;
+    const note = it.warn ? `<div class="claude-note warn">${icon('alert')}<span title="${esc(it.warn)}">Claude skipped: ${esc(it.warn)}</span></div>`
+      : it.note ? `<div class="claude-note">${icon('sparkle')}<span title="${esc(it.note)}">${esc(it.note)}</span></div>` : '';
     return `${compareHTML(it)}
       ${it.status === 'matching' ? `<div class="bar"><div style="width:${Math.round((it.progress || 0) * 100)}%"></div></div>` : ''}
       <div class="card-foot">
-        <div class="meta"><div class="title">${esc(it.name)}</div>${sub}</div>
+        <div class="meta"><div class="title">${esc(it.name)}</div>${sub}${note}</div>
         ${statusPill(it)}
       </div>
       <div class="acts">
@@ -210,8 +216,10 @@
         ${opt('auto_check', 'Check for updates automatically', 'Looks for a new version at launch and every few hours')}
         ${opt('auto_install', 'Download and install updates automatically', 'Downloads in the background and installs when you quit')}
       </div>
+      <div class="label">Claude</div>
+      <div class="group" id="claude-group"></div>
       <div class="label">About</div>
-      <div class="about">Lut measures the colour of the reference and the clip in OKLab, matches white balance, saturation and contrast, and bakes the result into a 33-point .cube LUT. Graded videos are re-encoded with that LUT through ffmpeg; audio is copied as is. Everything runs on this computer.</div>
+      <div class="about">Lut measures the colour of the reference and the clip in OKLab, matches white balance, saturation and contrast, and bakes the result into a 33-point .cube LUT. Graded videos are re-encoded with that LUT through ffmpeg; audio is copied as is. Everything runs on this computer, unless you turn on Refine with Claude: then small preview frames (never the clips) go to Claude for a check.</div>
       <div class="foot"><button class="link" data-m="page">Release notes on GitHub</button><button class="link" data-m="welcome" style="margin-right:0">Show welcome screen</button></div>`,
       async (m, el) => {
         if (m === 'close') closeModal();
@@ -223,8 +231,60 @@
         else if (m === 'see-update') openUpdate();
         else if (m === 'page') api.open_url(upd ? upd.page : '');
         else if (m === 'welcome') { closeModal(); showWelcome(); }
+        else if (m === 'key-save' || m === 'key-remove') await saveKey(m === 'key-remove');
+        else if (m === 'console') api.open_url('https://console.anthropic.com/settings/keys');
       }, 'settings');
     renderUpdateRow();
+    renderClaudeGroup();
+  }
+
+  function renderClaudeGroup() {
+    const g = $('#claude-group');
+    if (!g) return;
+    g.innerHTML = `<div class="ver-row"><div class="t"><b>API key</b><span class="${claude.has_key ? 'ok' : ''}">${claude.has_key
+      ? (claude.env ? 'Using ANTHROPIC_API_KEY from the environment' : `Saved in your ${document.body.classList.contains('win') ? 'Windows Credential Manager' : 'Keychain'} ${esc(claude.hint)}`)
+      : 'Not set. Refine with Claude stays off until you add one.'}</span></div>
+      ${claude.has_key && !claude.env ? `<button class="btn-quiet" data-m="key-remove">${icon('trash')}Remove</button>` : ''}</div>
+      <div><div class="key-row" style="flex:1"><input id="key-input" type="password" placeholder="${claude.has_key ? 'Paste a new key to replace it' : 'sk-ant-…'}" autocomplete="off" spellcheck="false">
+      <button class="btn-quiet" data-m="key-save">Save</button></div></div>
+      <div><span class="hint">Your key stays on this computer. Each refined clip sends a few small preview frames to Claude and costs a few cents. <button class="link" data-m="console">Get a key</button></span></div>`;
+    const inp = $('#key-input');
+    if (inp) inp.onkeydown = (e) => { if (e.key === 'Enter') saveKey(false); };
+  }
+  async function saveKey(remove) {
+    const inp = $('#key-input');
+    const v = remove ? '' : (inp ? inp.value.trim() : '');
+    if (!remove && !v) return;
+    claude = await api.set_claude_key(v);
+    if (claude.error) toast(claude.error, true);
+    else toast(remove ? 'API key removed' : 'API key saved');
+    if (!remove && claude.has_key && !settings.refine) settings = await api.set_setting('refine', true);
+    if (remove) settings = await api.info().then((i) => i.settings);
+    renderClaudeGroup();
+    renderRefine();
+  }
+  function renderRefine() {
+    $('#refine-row .switch').classList.toggle('on', !!(settings.refine && claude.has_key));
+    $('#refine-sub').textContent = claude.has_key ? 'Claude checks each match and fine-tunes it' : 'Add your Claude API key to turn this on';
+  }
+  function renderSource() {
+    $('#source-sum').textContent = `Clips ${short(settings.source)} · Reference ${short(settings.ref_source)}`;
+  }
+  function openSources() {
+    const grid = (key) => `<div class="src-grid" data-key="${key}">${[['auto', 'Auto']].concat(sources).map(([k, label]) =>
+      `<button data-m="src" data-key="${key}" data-v="${k}" class="${(settings[key] || 'auto') === k ? 'on' : ''}" title="${esc(label)}">${esc(short(k))}</button>`).join('')}</div>`;
+    showModal('sources', `<div class="modal-title"><h2>Shot in</h2><button class="btn-icon" data-m="close">${icon('x')}</button></div>
+      <div class="src-hint">Pick the camera profile so log footage is turned into normal Rec.709 before it’s matched. The conversion is built into the .cube, so it goes straight onto your log clips in Resolve, Premiere or Final Cut. Auto picks HLG or PQ when the file is tagged that way, otherwise Rec.709.</div>
+      <div class="label">Clips</div>${grid('source')}
+      <div class="label">Reference</div>${grid('ref_source')}`,
+      async (m, el) => {
+        if (m === 'close') closeModal();
+        else if (m === 'src') {
+          settings = await api.set_setting(el.dataset.key, el.dataset.v);
+          el.parentNode.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === el));
+          renderSource();
+        }
+      }, 'sources');
   }
 
   function renderPill() {
@@ -404,6 +464,12 @@
       (m) => { if (m === 'close') closeModal(); }, 'output');
     $('#output-slot').replaceWith($('#output-panel'));
   };
+  $('#source-row').onclick = () => openSources();
+  $('#refine-row').onclick = async () => {
+    if (!claude.has_key) { openSettings(); setTimeout(() => { const i = $('#key-input'); if (i) i.focus(); }, 50); return; }
+    settings = await api.set_setting('refine', !settings.refine);
+    renderRefine();
+  };
   $('#open-after').onclick = async () => { settings = await api.set_setting('open_after', !settings.open_after); renderOutput(); };
 
   async function pickCustom() {
@@ -481,6 +547,8 @@
     home = info.home || '';
     upd = info.update;
     ref = info.ref || null;
+    claude = info.claude || claude;
+    sources = info.sources || [];
     if (settings.custom_dir) customDir = settings.custom_dir;
     strength.value = settings.strength == null ? 100 : settings.strength;
     paintStrength();
@@ -489,6 +557,8 @@
     setTabs('#codec', settings.codec || 'h264');
     setMode(settings.out_mode === 'custom' && customDir ? 'custom' : 'beside');
     renderRef();
+    renderSource();
+    renderRefine();
     renderPill();
     if (!settings.welcomed) setTimeout(showWelcome, 1500);
     $('#ffmpeg-note').innerHTML = info.ffmpeg ? '<i class="dot"></i>Photos and videos supported' : '<i class="dot bad"></i>Videos need ffmpeg (see README)';
@@ -529,9 +599,12 @@
     };
     return {
       info: async () => ({ version: '1.0.0', ffmpeg: true, platform: 'darwin', home: '/Users/demo',
-        settings: { out_mode: 'beside', open_after: false, strength: 85, keep_luma: false, lut_only: false, codec: 'h264', auto_check: true, auto_install: true, welcomed: !location.search.includes('welcome') },
+        settings: { out_mode: 'beside', open_after: false, strength: 85, keep_luma: false, lut_only: false, codec: 'h264', source: 'auto', ref_source: 'auto', refine: location.search.includes('key'), auto_check: true, auto_install: true, welcomed: !location.search.includes('welcome') },
         update: { phase: location.search.includes('update') ? 'ready' : 'uptodate', current: '1.0.0', latest: '1.1.0', progress: 0, can_install: true,
-          notes: '- Match to a whole reference clip\n- Faster previews', page: 'https://github.com', last_checked: new Date().toISOString() }, ref: null }),
+          notes: '- Match to a whole reference clip\n- Faster previews', page: 'https://github.com', last_checked: new Date().toISOString() }, ref: null,
+        claude: { has_key: location.search.includes('key'), hint: '…3f9a' },
+        sources: [['rec709', 'Rec.709 / normal'], ['slog3', 'Sony S-Log3'], ['vlog', 'Panasonic V-Log'], ['logc3', 'ARRI LogC3'], ['logc4', 'ARRI LogC4'], ['clog3', 'Canon Log 3'], ['nlog', 'Nikon N-Log'], ['flog', 'Fujifilm F-Log'], ['flog2', 'Fujifilm F-Log2'], ['applelog', 'Apple Log'], ['hlg', 'HLG'], ['pq', 'PQ']] }),
+      set_claude_key: async (k) => ({ has_key: !!k, hint: k ? '…' + k.slice(-4) : '' }),
       set_setting: async (k, v) => { settings[k] = v; return Object.assign({}, settings); },
       check_updates: async () => upd, download_update() {}, install_update() {}, open_url() {},
       pick_reference: setRef, pick_clips: add, pick_folder: add, choose_output: async () => '/Users/demo/Desktop/Graded',
@@ -541,7 +614,7 @@
         todo.forEach((it, k) => {
           setTimeout(() => upsert(Object.assign({}, it, { status: 'matching', progress: 0 })), k * 900);
           for (let j = 1; j <= 4; j++) setTimeout(() => App.on('progress', { id: it.id, p: j / 5, done: k + j / 5, total: todo.length }), k * 900 + j * 160);
-          setTimeout(() => { upsert(Object.assign({}, it, { status: 'done', progress: 1, cube: '/Users/demo/Footage/graded/x.cube', graded: '/Users/demo/Footage/graded/x_graded.mp4' })); App.on('progress', { done: k + 1, total: todo.length }); }, k * 900 + 860);
+          setTimeout(() => { upsert(Object.assign({}, it, { status: 'done', progress: 1, note: settings.refine ? 'Warmed the highlights and lifted the blacks a touch to match the reference’s faded film look.' : null, cube: '/Users/demo/Footage/graded/x.cube', graded: '/Users/demo/Footage/graded/x_graded.mp4' })); App.on('progress', { done: k + 1, total: todo.length }); }, k * 900 + 860);
         });
         setTimeout(() => { App.on('busy', { busy: false }); App.on('finished', { ok: todo.length, total: todo.length, dir: '/Users/demo/Footage/graded' }); }, todo.length * 900 + 500);
       },

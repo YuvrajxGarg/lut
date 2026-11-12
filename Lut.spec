@@ -14,6 +14,13 @@ datas += [
     (os.path.join(root, "VERSION"), "."),
 ]
 hiddenimports += ["certifi"]
+# Refine with Claude: the Anthropic SDK, and keyring with its macOS / Windows backends.
+for pkg in ("anthropic", "keyring"):
+    d, b, h = collect_all(pkg)
+    datas += d
+    binaries += b
+    hiddenimports += h
+hiddenimports += ["keyring.backends.macOS", "keyring.backends.Windows"]
 excludes = ["tkinter", "_tkinter", "matplotlib", "scipy"] if sys.platform == "darwin" else ["matplotlib", "scipy"]
 
 a = Analysis(

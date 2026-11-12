@@ -25,6 +25,8 @@ import tempfile
 
 import numpy as np
 
+from . import transforms
+
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff", ".bmp"}
 VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".mkv", ".webm", ".avi"}
 SUPPORTED_EXTS = IMAGE_EXTS | VIDEO_EXTS
@@ -127,17 +129,23 @@ def _subsample(x, n, seed=0):
 class ColorMatch(object):
     """A fitted source -> reference colour transform."""
 
-    def __init__(self, mu_s, mu_r, t, curve_x, curve_y, strength=1.0, keep_luma=False):
+    def __init__(self, mu_s, mu_r, t, curve_x, curve_y, strength=1.0, keep_luma=False, source="rec709"):
         self.mu_s, self.mu_r, self.t = mu_s, mu_r, t
         self.curve_x, self.curve_y = curve_x, curve_y
         self.strength = float(strength)
         self.keep_luma = bool(keep_luma)
+        self.source = source or "rec709"
+        self.adjust = None   # optional grading.Adjust applied after the match
+        self.ref_source = "rec709"
+        self.notes = []      # what the refine step said, round by round
 
     @classmethod
-    def fit(cls, src_rgb, ref_rgb, strength=1.0, keep_luma=False):
-        """src_rgb, ref_rgb: (N, 3) arrays of sRGB code values in 0..1."""
-        src = rgb_to_oklab(_subsample(_usable(np.asarray(src_rgb, np.float64)), MAX_PIXELS, 1))
-        ref = rgb_to_oklab(_subsample(_usable(np.asarray(ref_rgb, np.float64)), MAX_PIXELS, 2))
+    def fit(cls, src_rgb, ref_rgb, strength=1.0, keep_luma=False, source="rec709", ref_source="rec709"):
+        """src_rgb, ref_rgb: (N, 3) arrays of code values in 0..1, in their sources."""
+        src_rgb = transforms.to_display(_subsample(np.asarray(src_rgb, np.float64), MAX_PIXELS * 2, 3), source)
+        ref_rgb = transforms.to_display(_subsample(np.asarray(ref_rgb, np.float64), MAX_PIXELS * 2, 4), ref_source)
+        src = rgb_to_oklab(_subsample(_usable(src_rgb), MAX_PIXELS, 1))
+        ref = rgb_to_oklab(_subsample(_usable(ref_rgb), MAX_PIXELS, 2))
         if len(src) < 16 or len(ref) < 16:
             raise LutError("Not enough picture to measure. Is the frame blank?")
         mu_s, mu_r = src.mean(0), ref.mean(0)
@@ -155,7 +163,9 @@ class ColorMatch(object):
         d = np.convolve(np.pad(d, 3, mode="edge"), k, mode="valid")
         ys = xs + d
         ys = np.maximum.accumulate(ys)
-        return cls(mu_s, mu_r, t, xs, ys, strength, keep_luma)
+        cm = cls(mu_s, mu_r, t, xs, ys, strength, keep_luma, source)
+        cm.ref_source = ref_source or "rec709"
+        return cm
 
     def _curve(self, l):
         xs, ys = self.curve_x, self.curve_y
@@ -174,9 +184,16 @@ class ColorMatch(object):
         y = x + (y - x) * self.strength
         return y.reshape(shape)
 
+    def apply_display(self, rgb):
+        """Rec.709 code values (already out of log) -> graded code values."""
+        out = oklab_to_rgb(self.apply_lab(rgb_to_oklab(rgb)))
+        if self.adjust is not None:
+            out = self.adjust.apply(out)
+        return out
+
     def apply_rgb(self, rgb):
-        """Exact (non-LUT) transform of sRGB code values; used by the tests."""
-        return oklab_to_rgb(self.apply_lab(rgb_to_oklab(rgb)))
+        """Exact (non-LUT) transform of source code values."""
+        return self.apply_display(transforms.to_display(rgb, self.source))
 
     def lut(self, size=LUT_SIZE):
         """(size, size, size, 3) table indexed [b, g, r] (the .cube order)."""
@@ -186,12 +203,12 @@ class ColorMatch(object):
         return self.apply_rgb(grid)
 
 
-def write_cube(path, table, title="Lut"):
+def write_cube(path, table, title="Lut", source_label="Rec.709 / sRGB"):
     size = table.shape[0]
     rows = table.reshape(-1, 3)
     with open(path, "w", encoding="ascii", newline="\n") as f:
         f.write('TITLE "%s"\n' % title.replace('"', "'"))
-        f.write("# Made with Lut (PXLVZN). Input and output: Rec.709 / sRGB.\n")
+        f.write("# Made with Lut (PXLVZN). Input: %s. Output: Rec.709 / sRGB.\n" % source_label)
         f.write("LUT_3D_SIZE %d\n" % size)
         f.write("DOMAIN_MIN 0.0 0.0 0.0\nDOMAIN_MAX 1.0 1.0 1.0\n")
         for r, g, b in rows:
@@ -272,9 +289,9 @@ def _need_ffmpeg():
 
 
 class VideoInfo(object):
-    def __init__(self, duration=None, width=None, height=None, has_audio=False, fps=None):
+    def __init__(self, duration=None, width=None, height=None, has_audio=False, fps=None, transfer=None):
         self.duration, self.width, self.height = duration, width, height
-        self.has_audio, self.fps = has_audio, fps
+        self.has_audio, self.fps, self.transfer = has_audio, fps, transfer
 
 
 def probe(path):
@@ -295,6 +312,9 @@ def probe(path):
             m = re.search(r"([\d.]+) fps", line)
             if m:
                 info.fps = float(m.group(1))
+            # e.g. "yuv420p10le(tv, bt2020nc/bt2020/arib-std-b67)": keep the colour tags.
+            tags = [g for g in re.findall(r"\(([^()]*)\)", line) if "/" in g and "0x" not in g]
+            info.transfer = tags[0] if tags else None
         if "Audio:" in line:
             info.has_audio = True
     if info.width is None:
@@ -411,7 +431,7 @@ def _video_codec_args(codec, ext):
     return ["-c:v", "libx264", "-crf", "16", "-preset", "medium", "-pix_fmt", "yuv420p"]
 
 
-def grade_video(src, dst, cube_path, codec="h264", progress=None):
+def grade_video(src, dst, cube_path, codec="h264", progress=None, tag709=False):
     """Apply a .cube with ffmpeg's lut3d. Audio is copied untouched when the container allows."""
     ff = _need_ffmpeg()
     info = probe(src)
@@ -427,6 +447,9 @@ def grade_video(src, dst, cube_path, codec="h264", progress=None):
             cmd = [ff, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", os.path.abspath(src),
                    "-map", "0:V:0", "-map", "0:a?", "-vf", vf] + _video_codec_args(codec, ext) + audio + [
                    "-map_metadata", "0", "-progress", "pipe:1", "-nostats"]
+            if tag709:
+                # The LUT turned log/HDR into Rec.709: say so, or players will treat it as HDR.
+                cmd += ["-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709"]
             if ext in (".mp4", ".mov", ".m4v"):
                 cmd += ["-movflags", "+faststart"]
             cmd.append(os.path.abspath(dst))
@@ -471,33 +494,62 @@ class Result(object):
         self.cube, self.graded, self.match = cube, graded, match
 
 
-def fit(src_frames, ref_frames, strength=1.0, keep_luma=False):
-    return ColorMatch.fit(pixels(src_frames), pixels(ref_frames), strength, keep_luma)
+def resolve_source(path, source):
+    """'auto' -> HLG/PQ when the file is tagged that way, else Rec.709."""
+    if source and source != "auto":
+        if source not in transforms.SOURCES:
+            raise LutError("Unknown source: %s" % source)
+        return source
+    if kind_of(path) != "video":
+        return "rec709"
+    try:
+        return transforms.guess(probe(path).transfer)
+    except LutError:
+        return "rec709"
 
 
-def match(src, ref, out_dir, strength=1.0, keep_luma=False, codec="h264", lut_only=False,
-          ref_frames=None, progress=None):
-    """Fit src -> ref, write the .cube and (unless lut_only) the graded copy."""
+def fit(src_frames, ref_frames, strength=1.0, keep_luma=False, source="rec709", ref_source="rec709"):
+    return ColorMatch.fit(pixels(src_frames), pixels(ref_frames), strength, keep_luma, source, ref_source)
+
+
+def write_outputs(cm, src, ref, out_dir, codec="h264", lut_only=False, progress=None):
+    """Bake a fitted match into the .cube and (unless lut_only) the graded copy."""
     if codec not in CODECS:
         raise LutError("codec must be one of " + ", ".join(CODECS))
-    if os.path.abspath(src) == os.path.abspath(ref):
-        raise LutError("The clip and the reference are the same file")
-    ref_frames = ref_frames if ref_frames is not None else load_frames(ref)
-    cm = fit(load_frames(src), ref_frames, strength, keep_luma)
     os.makedirs(out_dir, exist_ok=True)
     cube, graded = output_paths(src, out_dir, codec)
     if os.path.abspath(graded) == os.path.abspath(src):
         raise LutError("Output would overwrite the original")
     table = cm.lut()
-    write_cube(cube, table, "%s to %s" % (os.path.basename(src), os.path.basename(ref)))
+    write_cube(cube, table, "%s to %s" % (os.path.basename(src), os.path.basename(ref)),
+               transforms.label(cm.source))
     if progress:
         progress(0.02)
     if not lut_only:
         if kind_of(src) == "image":
             grade_image(src, graded, table)
         else:
-            grade_video(src, graded, cube, codec, progress)
+            grade_video(src, graded, cube, codec, progress, tag709=cm.source != "rec709")
     return Result(cube, None if lut_only else graded, cm)
+
+
+def match(src, ref, out_dir, strength=1.0, keep_luma=False, codec="h264", lut_only=False,
+          ref_frames=None, progress=None, source="auto", ref_source="auto", refine=None):
+    """Fit src -> ref, write the .cube and (unless lut_only) the graded copy.
+
+    refine, if given, is called as refine(cm, src_frames, ref_frames) before the
+    outputs are written and may set cm.adjust (see refine.py)."""
+    if codec not in CODECS:
+        raise LutError("codec must be one of " + ", ".join(CODECS))
+    if os.path.abspath(src) == os.path.abspath(ref):
+        raise LutError("The clip and the reference are the same file")
+    ref_frames = ref_frames if ref_frames is not None else load_frames(ref)
+    src_frames = load_frames(src)
+    cm = fit(src_frames, ref_frames, strength, keep_luma,
+             resolve_source(src, source), resolve_source(ref, ref_source))
+    if refine:
+        refine(cm, src_frames, ref_frames)
+    return write_outputs(cm, src, ref, out_dir, codec, lut_only, progress)
 
 
 def collect_files(paths, recursive=True):

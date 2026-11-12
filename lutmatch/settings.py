@@ -15,6 +15,9 @@ DEFAULTS = {
     "keep_luma": False,          # match colour only
     "lut_only": False,           # skip the graded copy
     "codec": "h264",
+    "source": "auto",            # how the clips were shot: auto, rec709, slog3, vlog, ...
+    "ref_source": "auto",        # how the reference was shot
+    "refine": False,             # let Claude check and fine-tune each match (needs an API key)
     "auto_check": True,          # check GitHub Releases for updates
     "auto_install": True,        # download in the background, install on quit
     "welcomed": False,
@@ -25,6 +28,7 @@ DEFAULTS = {
 
 
 PUBLIC_KEYS = ("out_mode", "custom_dir", "open_after", "strength", "keep_luma", "lut_only", "codec",
+               "source", "ref_source", "refine",
                "auto_check", "auto_install", "welcomed")
 
 

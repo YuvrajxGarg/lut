@@ -15,7 +15,7 @@ import numpy as np
 import webview
 from webview.dom import DOMEventHandler
 
-from . import __version__, core
+from . import __version__, core, refine, transforms
 from .settings import Settings
 from .updater import Updater
 
@@ -76,6 +76,7 @@ class Api(object):
             "ext": os.path.splitext(it["path"])[1][1:].upper(), "status": it["status"],
             "error": it.get("error"), "before": it.get("before"), "after": it.get("after"),
             "cube": it.get("cube"), "graded": it.get("graded"), "progress": it.get("progress", 0),
+            "source": self._src_for(it), "note": it.get("note"), "warn": it.get("warn"),
         }
 
     def _ref_public(self):
@@ -83,7 +84,18 @@ class Api(object):
         if not r:
             return None
         return {"name": os.path.basename(r["path"]), "path": r["path"], "kind": r["kind"],
-                "thumb": r.get("thumb"), "status": r["status"], "error": r.get("error")}
+                "thumb": r.get("thumb"), "status": r["status"], "error": r.get("error"),
+                "source": self._ref_source()}
+
+    def _src_for(self, it):
+        s = self.settings.get("source")
+        return s if s in transforms.SOURCES else it.get("auto_source", "rec709")
+
+    def _ref_source(self):
+        s = self.settings.get("ref_source")
+        if s in transforms.SOURCES:
+            return s
+        return (self.ref or {}).get("auto_source", "rec709")
 
     def _opts(self):
         s = self.settings
@@ -95,16 +107,33 @@ class Api(object):
     def info(self):
         return {"version": __version__, "ffmpeg": bool(core.find_ffmpeg()), "platform": sys.platform,
                 "settings": self.settings.public(), "update": self.updater.state(),
-                "home": os.path.expanduser("~"), "ref": self._ref_public()}
+                "home": os.path.expanduser("~"), "ref": self._ref_public(), "claude": self.claude_state(),
+                "sources": [[k, transforms.label(k)] for k in transforms.ORDER]}
+
+    # Claude API key (kept in the OS keychain, never in settings.json)
+    def claude_state(self):
+        return {"has_key": refine.has_key(), "hint": refine.key_hint(),
+                "env": bool(os.environ.get("ANTHROPIC_API_KEY"))}
+
+    def set_claude_key(self, key):
+        try:
+            refine.set_key(key)
+        except Exception as e:
+            return dict(self.claude_state(), error="Couldn't save the key: %s" % e)
+        if not (key or "").strip() and self.settings.get("refine"):
+            self.settings.set("refine", False)
+        return self.claude_state()
 
     def set_setting(self, key, value):
         if key in ("out_mode", "custom_dir", "open_after", "auto_check", "auto_install", "welcomed",
-                   "strength", "keep_luma", "lut_only", "codec"):
+                   "strength", "keep_luma", "lut_only", "codec", "source", "ref_source", "refine"):
             self.settings.set(key, value)
             if key == "auto_install" and value and self.updater.phase == "available":
                 threading.Thread(target=self.updater.stage_newest, daemon=True).start()
-            if key in ("strength", "keep_luma"):
+            if key in ("strength", "keep_luma", "source", "ref_source"):
                 self._refresh_previews()
+            if key == "ref_source":
+                self._emit("ref", self._ref_public())
         return self.settings.public()
 
     # updates
@@ -121,7 +150,7 @@ class Api(object):
         threading.Thread(target=go, daemon=True).start()
 
     def open_url(self, url):
-        if not url.startswith("https://github.com/"):
+        if not url.startswith(("https://github.com/", "https://console.anthropic.com/")):
             return
         import webbrowser
         webbrowser.open(url)
@@ -177,6 +206,7 @@ class Api(object):
 
     def _load_ref(self, ref):
         try:
+            ref["auto_source"] = core.resolve_source(ref["path"], "auto")
             ref["frames"] = core.load_frames(ref["path"], width=PREVIEW_WIDTH // 2)
             ref["thumb"] = _jpeg(core.poster(core.load_frames(ref["path"], count=1, width=PREVIEW_WIDTH))
                                  if ref["kind"] == "video" else core._load_image(ref["path"], PREVIEW_WIDTH))
@@ -223,6 +253,7 @@ class Api(object):
     def _load_clips(self, items):
         for it in items:
             try:
+                it["auto_source"] = core.resolve_source(it["path"], "auto")
                 it["frames"] = core.load_frames(it["path"], width=PREVIEW_WIDTH // 2)
                 if it["kind"] == "video":
                     it["poster"] = core.poster(core.load_frames(it["path"], count=1, width=PREVIEW_WIDTH))
@@ -243,7 +274,8 @@ class Api(object):
             return
         o = self._opts()
         try:
-            cm = core.fit(it["frames"], ref["frames"], o["strength"], o["keep_luma"])
+            cm = core.fit(it["frames"], ref["frames"], o["strength"], o["keep_luma"],
+                          self._src_for(it), self._ref_source())
             table = cm.lut(core.LUT_SIZE)
             if gen is not None and gen != self.preview_gen:
                 return
@@ -292,7 +324,9 @@ class Api(object):
         if not todo:
             return
         self.busy = True
-        threading.Thread(target=self._match, args=(todo, mode, custom_dir, self._opts()), daemon=True).start()
+        o = self._opts()
+        o["refine"] = bool(self.settings.get("refine")) and refine.has_key()
+        threading.Thread(target=self._match, args=(todo, mode, custom_dir, o), daemon=True).start()
 
     def _match(self, todo, mode, custom_dir, o):
         ok = 0
@@ -304,17 +338,37 @@ class Api(object):
             out_dir = custom_dir if (mode == "custom" and custom_dir) else os.path.join(os.path.dirname(src), "graded")
             it["status"] = "matching"
             it["progress"] = 0
-            it["error"] = None
+            it["error"] = it["note"] = it["warn"] = None
             self._emit("upsert", self._public(it))
+
+            refiner = None
+            if o.get("refine"):
+                def status(msg, it=it):
+                    it["status"] = "refining"
+                    it["note"] = msg
+                    self._emit("upsert", self._public(it))
+                refiner = refine.Refiner(status=status, soft=True)
 
             def prog(p, it=it, i=i):
                 it["progress"] = p
                 self._emit("progress", {"id": it["id"], "p": p, "done": i + p, "total": len(todo)})
 
             try:
+                def prog_and_status(p, prog=prog, it=it):
+                    if it["status"] != "matching":
+                        it["status"] = "matching"
+                        it["note"] = None
+                        self._emit("upsert", self._public(it))
+                    prog(p)
+
                 r = core.match(src, ref["path"], out_dir, o["strength"], o["keep_luma"], o["codec"], o["lut_only"],
-                               ref_frames=ref["frames"], progress=prog)
+                               ref_frames=ref["frames"], progress=prog_and_status,
+                               source=self._src_for(it), ref_source=self._ref_source(), refine=refiner)
                 it["cube"], it["graded"] = r.cube, r.graded
+                it["note"] = r.match.notes[-1] if r.match.notes else None
+                it["warn"] = getattr(r.match, "refine_error", None)
+                if r.match.adjust is not None and "poster" in it:
+                    it["after"] = _jpeg(core.apply_lut(it["poster"], r.match.lut()))
                 it["status"] = "done"
                 ok += 1
                 last_dir = out_dir

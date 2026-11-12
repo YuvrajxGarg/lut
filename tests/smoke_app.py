@@ -23,6 +23,11 @@ assert os.path.isfile(os.path.join(out, "clip.cube")), "app produced no LUT (exi
 assert os.path.isfile(os.path.join(out, "clip_graded.png")), "app produced no graded photo (exit %s)" % r.returncode
 core.read_cube(os.path.join(out, "clip.cube"))
 
+# A camera log profile goes through the frozen app too (transforms module bundled).
+r = subprocess.run([exe, "match", ref, src, "-o", os.path.join(d, "slog"), "--source", "slog3", "--lut-only"], timeout=300)
+with open(os.path.join(d, "slog", "clip.cube")) as f:
+    assert "S-Log3" in f.read(), "S-Log3 LUT header missing (exit %s)" % r.returncode
+
 # Video: proves the built app finds its bundled ffmpeg and can encode H.264.
 ff = core.find_ffmpeg()
 if ff:

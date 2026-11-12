@@ -8,3 +8,6 @@ pillow>=10.0
 imageio-ffmpeg>=0.4.9
 # Trusted certificates for update checks in the packaged app
 certifi
+# Optional "Refine with Claude": the official Anthropic SDK, and the OS keychain for the API key
+anthropic>=1.0
+keyring>=24

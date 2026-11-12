@@ -1,6 +1,7 @@
 """Command-line interface.
 
     Lut match REFERENCE CLIP [CLIP ...] [-o OUTPUT_DIR] [--strength 0.8] [--lut-only]
+              [--source slog3] [--ref-source rec709] [--refine]
     Lut apply LUT.cube CLIP [CLIP ...] [-o OUTPUT_DIR]
 """
 
@@ -8,7 +9,7 @@ import argparse
 import os
 import sys
 
-from . import core
+from . import core, transforms
 
 
 def _bar(name):
@@ -38,6 +39,12 @@ def main(argv=None):
     m.add_argument("--keep-luma", action="store_true", help="match colour only, keep the clip's brightness and contrast")
     m.add_argument("--lut-only", action="store_true", help="write the .cube without a graded copy")
     m.add_argument("--codec", choices=core.CODECS, default="h264", help="codec for graded videos (default h264)")
+    srcs = ["auto"] + transforms.ORDER
+    m.add_argument("--source", choices=srcs, default="auto",
+                   help="how the clips were recorded, e.g. slog3, vlog, logc3, hlg (default auto: HLG/PQ if tagged, else Rec.709)")
+    m.add_argument("--ref-source", choices=srcs, default="auto", help="how the reference was recorded (default auto)")
+    m.add_argument("--refine", action="store_true",
+                   help="let Claude check the match and fine-tune it (needs ANTHROPIC_API_KEY or a key saved in the app)")
     a = sub.add_parser("apply", help="grade clips with an existing .cube LUT")
     a.add_argument("lut")
     a.add_argument("clips", nargs="+")
@@ -72,6 +79,14 @@ def main(argv=None):
         print("No supported photos or videos found.")
         return 1
 
+    refiner = None
+    if args.cmd == "match" and args.refine:
+        from . import refine
+        if not refine.has_key():
+            print("--refine needs an API key: set ANTHROPIC_API_KEY or save one in the app's Settings.")
+            return 1
+        refiner = refine.Refiner(status=lambda msg: print("  " + msg), soft=True)
+
     failures = 0
     for path in clips:
         print(path)
@@ -79,7 +94,12 @@ def main(argv=None):
         try:
             if args.cmd == "match":
                 r = core.match(path, args.reference, out_dir, args.strength, args.keep_luma, args.codec,
-                               args.lut_only, ref_frames=ref_frames, progress=_bar(os.path.basename(path)))
+                               args.lut_only, ref_frames=ref_frames, progress=_bar(os.path.basename(path)),
+                               source=args.source, ref_source=args.ref_source, refine=refiner)
+                for note in r.match.notes:
+                    print("  claude: " + note)
+                if getattr(r.match, "refine_error", None):
+                    print("  ! Claude refine skipped: %s (kept the plain match)" % r.match.refine_error)
                 if sys.stdout.isatty() and r.graded and core.kind_of(path) == "video":
                     print()
                 print("  LUT    -> " + r.cube)
