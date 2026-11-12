@@ -51,21 +51,21 @@ def _first(res):
 
 class Api(object):
     def __init__(self):
-        self.window = None
-        self.ref = None          # {"path", "name", "frames", "thumb", "kind"}
-        self.items = {}          # id -> clip dict
-        self.next_id = 1
-        self.lock = threading.Lock()
-        self.preview_gen = 0
-        self.busy = False
-        self.settings = Settings()
-        self.updater = Updater(self.settings, lambda st: self._emit("update", st))
+        self._window = None
+        self._ref = None          # {"path", "name", "frames", "thumb", "kind"}
+        self._items = {}          # id -> clip dict
+        self._next_id = 1
+        self._lock = threading.Lock()
+        self._preview_gen = 0
+        self._busy = False
+        self._settings = Settings()
+        self._updater = Updater(self._settings, lambda st: self._emit("update", st))
 
     # ---- helpers ---------------------------------------------------------
     def _emit(self, event, payload):
-        if self.window:
+        if self._window:
             try:
-                self.window.evaluate_js("window.App && App.on(%s, %s)" % (json.dumps(event), json.dumps(payload)))
+                self._window.evaluate_js("window.App && App.on(%s, %s)" % (json.dumps(event), json.dumps(payload)))
             except Exception:
                 pass
 
@@ -80,7 +80,7 @@ class Api(object):
         }
 
     def _ref_public(self):
-        r = self.ref
+        r = self._ref
         if not r:
             return None
         return {"name": os.path.basename(r["path"]), "path": r["path"], "kind": r["kind"],
@@ -88,17 +88,17 @@ class Api(object):
                 "source": self._ref_source()}
 
     def _src_for(self, it):
-        s = self.settings.get("source")
+        s = self._settings.get("source")
         return s if s in transforms.SOURCES else it.get("auto_source", "rec709")
 
     def _ref_source(self):
-        s = self.settings.get("ref_source")
+        s = self._settings.get("ref_source")
         if s in transforms.SOURCES:
             return s
-        return (self.ref or {}).get("auto_source", "rec709")
+        return (self._ref or {}).get("auto_source", "rec709")
 
     def _opts(self):
-        s = self.settings
+        s = self._settings
         return {"strength": max(0, min(100, int(s.get("strength") or 0))) / 100.0,
                 "keep_luma": bool(s.get("keep_luma")), "lut_only": bool(s.get("lut_only")),
                 "codec": s.get("codec") if s.get("codec") in core.CODECS else "h264"}
@@ -106,7 +106,7 @@ class Api(object):
     # ---- called from JS --------------------------------------------------
     def info(self):
         return {"version": __version__, "ffmpeg": bool(core.find_ffmpeg()), "platform": sys.platform,
-                "settings": self.settings.public(), "update": self.updater.state(),
+                "settings": self._settings.public(), "update": self._updater.state(),
                 "home": os.path.expanduser("~"), "ref": self._ref_public(), "claude": self.claude_state(),
                 "sources": [[k, transforms.label(k)] for k in transforms.ORDER]}
 
@@ -120,33 +120,33 @@ class Api(object):
             refine.set_key(key)
         except Exception as e:
             return dict(self.claude_state(), error="Couldn't save the key: %s" % e)
-        if not (key or "").strip() and self.settings.get("refine"):
-            self.settings.set("refine", False)
+        if not (key or "").strip() and self._settings.get("refine"):
+            self._settings.set("refine", False)
         return self.claude_state()
 
     def set_setting(self, key, value):
         if key in ("out_mode", "custom_dir", "open_after", "auto_check", "auto_install", "welcomed",
                    "strength", "keep_luma", "lut_only", "codec", "source", "ref_source", "refine"):
-            self.settings.set(key, value)
-            if key == "auto_install" and value and self.updater.phase == "available":
-                threading.Thread(target=self.updater.stage_newest, daemon=True).start()
+            self._settings.set(key, value)
+            if key == "auto_install" and value and self._updater.phase == "available":
+                threading.Thread(target=self._updater.stage_newest, daemon=True).start()
             if key in ("strength", "keep_luma", "source", "ref_source"):
                 self._refresh_previews()
             if key == "ref_source":
                 self._emit("ref", self._ref_public())
-        return self.settings.public()
+        return self._settings.public()
 
     # updates
     def check_updates(self):
-        return self.updater.check(manual=True)
+        return self._updater.check(manual=True)
 
     def download_update(self):
-        threading.Thread(target=self.updater.stage_newest, daemon=True).start()
+        threading.Thread(target=self._updater.stage_newest, daemon=True).start()
 
     def install_update(self):
         def go():
-            if self.updater.install() == "open_page":
-                self.open_url(self.updater.state()["page"])
+            if self._updater.install() == "open_page":
+                self.open_url(self._updater.state()["page"])
         threading.Thread(target=go, daemon=True).start()
 
     def open_url(self, url):
@@ -161,22 +161,22 @@ class Api(object):
         return ("Photos and videos (%s)" % exts, "All files (*.*)")
 
     def pick_reference(self):
-        res = self.window.create_file_dialog(webview.FileDialog.OPEN, allow_multiple=False, file_types=self._file_types())
+        res = self._window.create_file_dialog(webview.FileDialog.OPEN, allow_multiple=False, file_types=self._file_types())
         if _first(res):
             self.set_reference(_first(res))
 
     def pick_clips(self):
-        res = self.window.create_file_dialog(webview.FileDialog.OPEN, allow_multiple=True, file_types=self._file_types())
+        res = self._window.create_file_dialog(webview.FileDialog.OPEN, allow_multiple=True, file_types=self._file_types())
         if res:
             self.add_clips(list(res))
 
     def pick_folder(self):
-        res = _first(self.window.create_file_dialog(webview.FileDialog.FOLDER))
+        res = _first(self._window.create_file_dialog(webview.FileDialog.FOLDER))
         if res:
             self.add_clips([res])
 
     def choose_output(self):
-        return _first(self.window.create_file_dialog(webview.FileDialog.FOLDER))
+        return _first(self._window.create_file_dialog(webview.FileDialog.FOLDER))
 
     def dropped(self, paths, zone):
         """Files dropped on the window. The reference slot takes the first file; the rest are clips."""
@@ -184,7 +184,7 @@ class Api(object):
         if not files:
             self._emit("toast", {"text": "No supported photos or videos there", "err": True})
             return
-        if zone == "ref" or self.ref is None:
+        if zone == "ref" or self._ref is None:
             self.set_reference(files[0])
             files = files[1:]
         if files:
@@ -196,13 +196,13 @@ class Api(object):
             self._emit("toast", {"text": "The reference needs to be a photo or video", "err": True})
             return
         # A clip promoted to reference leaves the clip list.
-        for k, it in list(self.items.items()):
+        for k, it in list(self._items.items()):
             if os.path.abspath(it["path"]) == os.path.abspath(path):
-                self.items.pop(k)
+                self._items.pop(k)
                 self._emit("removed", {"id": k})
-        self.ref = {"path": path, "kind": core.kind_of(path), "status": "loading"}
+        self._ref = {"path": path, "kind": core.kind_of(path), "status": "loading"}
         self._emit("ref", self._ref_public())
-        threading.Thread(target=self._load_ref, args=(self.ref,), daemon=True).start()
+        threading.Thread(target=self._load_ref, args=(self._ref,), daemon=True).start()
 
     def _load_ref(self, ref):
         try:
@@ -214,34 +214,34 @@ class Api(object):
         except Exception as e:
             ref["status"] = "failed"
             ref["error"] = str(e)
-        if ref is self.ref:
+        if ref is self._ref:
             self._emit("ref", self._ref_public())
             self._refresh_previews()
 
     def clear_reference(self):
-        if not self.busy:
-            self.ref = None
+        if not self._busy:
+            self._ref = None
             self._emit("ref", None)
-            for it in self.items.values():
+            for it in self._items.values():
                 it["after"] = None
                 self._emit("upsert", self._public(it))
 
     # clips
     def add_clips(self, paths):
         files = core.collect_files(paths)
-        ref_path = os.path.abspath(self.ref["path"]) if self.ref else None
-        known = {os.path.abspath(it["path"]) for it in self.items.values()}
+        ref_path = os.path.abspath(self._ref["path"]) if self._ref else None
+        known = {os.path.abspath(it["path"]) for it in self._items.values()}
         new = []
-        with self.lock:
+        with self._lock:
             for p in files:
                 ap = os.path.abspath(p)
                 if ap in known or ap == ref_path:
                     continue
                 known.add(ap)
-                it = {"id": self.next_id, "path": p, "size": _human(os.path.getsize(p)), "kind": core.kind_of(p),
+                it = {"id": self._next_id, "path": p, "size": _human(os.path.getsize(p)), "kind": core.kind_of(p),
                       "status": "loading"}
-                self.items[self.next_id] = it
-                self.next_id += 1
+                self._items[self._next_id] = it
+                self._next_id += 1
                 new.append(it)
         if not files:
             self._emit("toast", {"text": "No supported photos or videos there", "err": True})
@@ -268,7 +268,7 @@ class Api(object):
             self._emit("upsert", self._public(it))
 
     def _preview(self, it, gen=None):
-        ref = self.ref
+        ref = self._ref
         if not ref or ref.get("status") != "ready" or "poster" not in it:
             it["after"] = None
             return
@@ -277,7 +277,7 @@ class Api(object):
             cm = core.fit(it["frames"], ref["frames"], o["strength"], o["keep_luma"],
                           self._src_for(it), self._ref_source())
             table = cm.lut(core.LUT_SIZE)
-            if gen is not None and gen != self.preview_gen:
+            if gen is not None and gen != self._preview_gen:
                 return
             it["after"] = _jpeg(core.apply_lut(it["poster"], table))
         except Exception as e:
@@ -285,54 +285,54 @@ class Api(object):
             it["error"] = str(e)
 
     def _refresh_previews(self):
-        self.preview_gen += 1
-        gen = self.preview_gen
+        self._preview_gen += 1
+        gen = self._preview_gen
 
         def run():
-            for it in list(self.items.values()):
-                if gen != self.preview_gen:
+            for it in list(self._items.values()):
+                if gen != self._preview_gen:
                     return
                 if it["status"] in ("loading", "unsupported"):
                     continue
                 self._preview(it, gen)
-                if gen == self.preview_gen:
+                if gen == self._preview_gen:
                     self._emit("upsert", self._public(it))
         threading.Thread(target=run, daemon=True).start()
 
     def remove(self, item_id):
-        with self.lock:
-            self.items.pop(int(item_id), None)
+        with self._lock:
+            self._items.pop(int(item_id), None)
 
     def clear(self):
-        if not self.busy:
-            with self.lock:
-                self.items.clear()
+        if not self._busy:
+            with self._lock:
+                self._items.clear()
 
     def make_reference(self, item_id):
-        it = self.items.get(int(item_id))
-        if it and not self.busy:
-            old = self.ref["path"] if self.ref else None
+        it = self._items.get(int(item_id))
+        if it and not self._busy:
+            old = self._ref["path"] if self._ref else None
             self.set_reference(it["path"])
             if old:
                 self.add_clips([old])
 
     # the batch
     def match(self, mode, custom_dir):
-        if self.busy or not self.ref or self.ref.get("status") != "ready":
+        if self._busy or not self._ref or self._ref.get("status") != "ready":
             return
-        todo = [it for it in self.items.values() if it["status"] in ("ready", "failed", "done")]
+        todo = [it for it in self._items.values() if it["status"] in ("ready", "failed", "done")]
         if not todo:
             return
-        self.busy = True
+        self._busy = True
         o = self._opts()
-        o["refine"] = bool(self.settings.get("refine")) and refine.has_key()
+        o["refine"] = bool(self._settings.get("refine")) and refine.has_key()
         threading.Thread(target=self._match, args=(todo, mode, custom_dir, o), daemon=True).start()
 
     def _match(self, todo, mode, custom_dir, o):
         ok = 0
         last_dir = None
         self._emit("busy", {"busy": True, "total": len(todo)})
-        ref = self.ref
+        ref = self._ref
         for i, it in enumerate(todo):
             src = it["path"]
             out_dir = custom_dir if (mode == "custom" and custom_dir) else os.path.join(os.path.dirname(src), "graded")
@@ -377,10 +377,10 @@ class Api(object):
                 it["error"] = str(e)
             self._emit("upsert", self._public(it))
             self._emit("progress", {"done": i + 1, "total": len(todo)})
-        self.busy = False
+        self._busy = False
         self._emit("busy", {"busy": False})
         self._emit("finished", {"ok": ok, "total": len(todo), "dir": last_dir})
-        if ok and last_dir and self.settings.get("open_after"):
+        if ok and last_dir and self._settings.get("open_after"):
             self.reveal(last_dir)
 
     def reveal(self, path):
@@ -450,7 +450,7 @@ def main():
         "Lut", url=os.path.join(UI_DIR, "index.html"), js_api=api,
         width=1180, height=760, min_size=(920, 600), background_color=BG, easy_drag=False,
     )
-    api.window = window
+    api._window = window
 
     def on_drop(e):
         files = (e.get("dataTransfer") or {}).get("files") or []
@@ -474,11 +474,13 @@ def main():
         try:
             window.destroy()
         finally:
-            threading.Timer(3.0, lambda: os._exit(0)).start()
+            t = threading.Timer(3.0, lambda: os._exit(0))
+            t.daemon = True
+            t.start()
 
-    api.updater.on_quit_for_install = quit_for_install
-    window.events.closing += lambda: api.updater.install_on_quit()
-    window.events.loaded += lambda: api.updater.start()
+    api._updater.on_quit_for_install = quit_for_install
+    window.events.closing += lambda: api._updater.install_on_quit()
+    window.events.loaded += lambda: api._updater.start()
 
     if sys.platform == "darwin":
         window.events.before_show += lambda: _style_mac(window)
@@ -486,6 +488,11 @@ def main():
         window.events.shown += lambda: _style_windows(window)
     window.events.loaded += on_loaded
     webview.start(debug=bool(os.environ.get("LUT_DEBUG")))
+    if os.name == "nt":
+        # The window is closed. Leave without Python's normal shutdown: tearing down pythonnet and
+        # WinForms there can crash, and a crash report keeps the process alive, which stalls the
+        # update swap waiting for it to exit (the app then never reopened after an update).
+        os._exit(0)
 
 
 if __name__ == "__main__":

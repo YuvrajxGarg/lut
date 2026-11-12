@@ -643,8 +643,26 @@
     };
   }
 
-  if (window.pywebview && window.pywebview.api) start(window.pywebview.api);
-  else window.addEventListener('pywebviewready', () => start(window.pywebview.api));
+  // Never leave the window stuck on the splash. If startup throws, or the Python side never
+  // answers, show the app anyway and say what went wrong.
+  if (!location.search.includes('demo')) {
+    let started = false;
+    const reveal = (msg) => {
+      const s = $('#splash');
+      if (!s || s.classList.contains('out')) return;
+      s.classList.add('out'); $('#app').classList.add('in');
+      if (msg) toast(msg, true);
+    };
+    const boot = () => {
+      const a = window.pywebview && window.pywebview.api;
+      if (started || !a || typeof a.info !== 'function') return;
+      started = true;
+      start(a).catch((e) => reveal("Lut couldn't start: " + ((e && e.message) || e)));
+    };
+    window.addEventListener('pywebviewready', boot);
+    boot();
+    setTimeout(() => reveal(started ? '' : "Lut's engine didn't answer. Quit Lut and open it again."), 15000);
+  }
   if (location.search.includes('demo')) {
     const d = demoApi();
     start(d).then(() => {
