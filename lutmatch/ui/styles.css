@@ -309,9 +309,11 @@ body.win .titlebar { display: none; }
 .btn-icon.filled:hover { background: var(--fill-hover); }
 .about { color: var(--text3); font-size: 12px; line-height: 1.5; padding: 0 2px; }
 
-/* Splash letters animate with blur; WebKit clips filtered boxes, so give the
-   letter boxes room for the "g" descender without moving the baseline. */
-.splash-mark .l { padding: .08em 0 .3em; margin: -.08em 0 -.3em; }
+/* Splash letters animate with blur. WebKit clips a filtered element to its own box, and the
+   tight letter-spacing makes each letter's box narrower than its glyph, so the edges (the "x",
+   the "g" descender) were cut until the blur ended. Pad every side and cancel it with negative
+   margins: the letters get room to draw in without moving at all. */
+.splash-mark .l { padding: .1em .2em .3em; margin: -.1em -.2em -.3em; }
 .thumb img { animation: none; }
 #footer .frow > span:not(.path) { white-space: nowrap; flex: none; }
 .btn-primary { transition: transform .1s; }
